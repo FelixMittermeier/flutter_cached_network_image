@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:typed_data';
+import 'dart:io';
 import 'dart:ui' as ui;
 import 'dart:ui';
 
@@ -11,6 +11,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 /// ImageLoader class to load images on IO platforms.
+typedef _SimpleDecoderCallback = Future<ui.Codec> Function(
+    ImmutableBuffer buffer);
+
 class ImageLoader implements platform.ImageLoader {
   @Deprecated('Use loadImageAsync instead')
   @override
@@ -30,10 +33,7 @@ class ImageLoader implements platform.ImageLoader {
       url,
       cacheKey,
       chunkEvents,
-      (bytes) async {
-        final buffer = await ImmutableBuffer.fromUint8List(bytes);
-        return decode(buffer);
-      },
+      (buffer) => decode(buffer),
       cacheManager,
       maxHeight,
       maxWidth,
@@ -60,10 +60,7 @@ class ImageLoader implements platform.ImageLoader {
       url,
       cacheKey,
       chunkEvents,
-      (bytes) async {
-        final buffer = await ImmutableBuffer.fromUint8List(bytes);
-        return decode(buffer);
-      },
+      (buffer) => decode(buffer),
       cacheManager,
       maxHeight,
       maxWidth,
@@ -77,7 +74,7 @@ class ImageLoader implements platform.ImageLoader {
     String url,
     String? cacheKey,
     StreamController<ImageChunkEvent> chunkEvents,
-    Future<ui.Codec> Function(Uint8List) decode,
+    _SimpleDecoderCallback decode,
     BaseCacheManager cacheManager,
     int? maxHeight,
     int? maxWidth,
@@ -120,8 +117,8 @@ class ImageLoader implements platform.ImageLoader {
         }
         if (result is FileInfo) {
           final file = result.file;
-          final bytes = await file.readAsBytes();
-          final decoded = await decode(bytes);
+          final buffer = await _createImmutableBuffer(file);
+          final decoded = await decode(buffer);
           yield decoded;
         }
       }
@@ -137,4 +134,12 @@ class ImageLoader implements platform.ImageLoader {
       await chunkEvents.close();
     }
   }
+}
+
+Future<ImmutableBuffer> _createImmutableBuffer(File file) async {
+  if (file.runtimeType == File) {
+    return ImmutableBuffer.fromFilePath(file.path);
+  }
+  final bytes = await file.readAsBytes();
+  return ImmutableBuffer.fromUint8List(bytes);
 }
